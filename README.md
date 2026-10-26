@@ -1,14 +1,46 @@
 # KMail cleanup
 
-A conservative KMail/Akonadi cleanup tool. It previews matching messages into a
-timestamped CSV, then can move exactly that reviewed set to a configured review
-folder. It never permanently deletes messages.
+A local-first desktop app and CLI for conservative KMail/Akonadi cleanup. Choose
+presets, teach it from recent KMail headers, preview the exact matches, and move
+only that reviewed set to a configured review folder. It never permanently
+deletes messages.
+
+## Desktop app
+
+The Tauri app provides:
+
+- toggles for newsletters, promotions, and low-value notification presets;
+- editable sender, domain, subject, and exclusion rules;
+- a **Teach from mail** view that reads recent sender/subject headers directly
+  from KMail and turns selected examples into explicit rules;
+- browsable preview history with exact sender, subject, and reason details,
+  plus a confirmation step before moving anything; and
+- an Akonadi folder scanner so account and collection IDs do not need to be
+  discovered by hand.
+
+Message bodies are never loaded into the UI. All processing stays on the local
+machine, the window has a network-blocking content security policy, and the
+review-first checks used by the CLI also protect actions started from the app.
+
+Install the JavaScript dependencies and start the desktop app:
+
+```bash
+npm install
+npm run desktop
+```
+
+Build an installable RPM package with:
+
+```bash
+npm run desktop:build
+```
 
 ## Setup
 
 1. Copy `config.example.json` to `config.json` and fill in your Akonadi resource,
-   collection IDs, folder names, and cleanup rules. `config.json` is ignored by
-   Git because these values and rules can reveal details about a mail account.
+   collection IDs, folder names, and cleanup rules—or use **Mail setup → Scan
+   Akonadi** in the desktop app. `config.json` is ignored by Git because these
+   values and rules can reveal details about a mail account.
 2. Build the local Akonadi helper:
 
    ```bash

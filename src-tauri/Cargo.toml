@@ -1,0 +1,23 @@
+[package]
+name = "kmail-cleanup"
+version = "0.2.0"
+description = "Review-first KMail cleanup assistant"
+authors = ["KMail Cleanup contributors"]
+edition = "2021"
+
+[lib]
+name = "kmail_cleanup_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "6"
+csv = "1"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import re
 import subprocess
 import sys
@@ -33,6 +34,12 @@ MOVER = HERE / "kmail_cleanup_move"
 
 CUSTOM_RULES = CONFIG.get("cleanup_rules", [])
 PROTECTED_SUBJECT = re.compile(CONFIG.get("protected_subject_pattern", r"(?!)"), re.I)
+ENABLED_PRESETS = set(CONFIG.get("enabled_presets", ["newsletters", "promotions", "notifications"]))
+CATEGORY_PRESETS = {
+    "bulk-mail": "newsletters",
+    "advertisement": "promotions",
+    "notification": "notifications",
+}
 
 
 def db(sql: str) -> list[list[str]]:
@@ -90,7 +97,37 @@ def classify(msg, contacts: set[str]) -> str | None:
     if PROTECTED_SUBJECT.search(subject):
         return None
     category, reason = mail.classify(msg, contacts)
-    return reason if category != "keep" else None
+    preset = CATEGORY_PRESETS.get(category)
+    return reason if preset in ENABLED_PRESETS else None
+
+
+def message_examples(limit: int) -> list[dict[str, str]]:
+    contacts = mail.sent_contacts()
+    examples: list[dict[str, str]] = []
+    for item_id, uid, date, _size, reference in reversed(mail.message_rows(INBOX)):
+        if len(examples) >= limit:
+            break
+        msg = mail.load_headers(reference)
+        if msg is None:
+            continue
+        from_header = mail.clean_header(msg.get("from"))
+        sender = parseaddr(from_header)[1].lower()
+        category, generic_reason = mail.classify(msg, contacts)
+        configured_reason = classify(msg, contacts)
+        examples.append(
+            {
+                "akonadi_id": item_id,
+                "imap_uid": uid,
+                "date": date,
+                "sender": sender or from_header,
+                "from": from_header,
+                "subject": mail.clean_header(msg.get("subject")),
+                "classification": "remove" if configured_reason else "keep",
+                "reason": configured_reason or generic_reason,
+                "generic_category": category,
+            }
+        )
+    return examples
 
 
 def write_report(rows: list[dict[str, str]], inspected: int, skipped: int) -> Path:
@@ -144,13 +181,22 @@ def main() -> int:
     parser.add_argument("--report", type=Path, help="with --apply, use this preview CSV instead of the most recent one")
     parser.add_argument("--batch-size", type=int, default=100, help="messages per acknowledged batch (default: 100)")
     parser.add_argument("--timeout", type=int, default=120, help="seconds to wait for each batch (default: 120)")
+    parser.add_argument("--examples", action="store_true", help="print recent Inbox headers as JSON for the desktop app")
+    parser.add_argument("--limit", type=int, default=100, help="maximum examples returned with --examples (default: 100)")
     args = parser.parse_args()
     if not 1 <= args.batch_size <= 250 or args.timeout < 10:
         parser.error("batch size must be 1–250 and timeout at least 10 seconds")
     if args.report and not args.apply:
         parser.error("--report requires --apply")
+    if args.examples and args.apply:
+        parser.error("--examples cannot be combined with --apply")
+    if not 1 <= args.limit <= 500:
+        parser.error("limit must be 1–500")
 
     validate_account()
+    if args.examples:
+        print(json.dumps(message_examples(args.limit), ensure_ascii=False))
+        return 0
     if not args.apply:
         contacts = mail.sent_contacts()
         rows = []

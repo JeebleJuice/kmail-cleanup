@@ -1,6 +1,7 @@
 #include <Akonadi/Collection>
 #include <Akonadi/CollectionCreateJob>
 #include <Akonadi/CollectionFetchJob>
+#include <Akonadi/CollectionModifyJob>
 #include <Akonadi/Item>
 #include <Akonadi/ItemMoveJob>
 
@@ -64,6 +65,31 @@ int main(int argc, char **argv)
         const auto index = args.indexOf(option);
         return index >= 0 && index + 1 < args.size() ? args.at(index + 1) : QString();
     };
+    if (args.contains(QStringLiteral("--rename-collection"))) {
+        bool collectionOk = false;
+        const auto collectionId = valueFor(QStringLiteral("--rename-collection")).toLongLong(&collectionOk);
+        const QString newName = valueFor(QStringLiteral("--new-name"));
+        if (!collectionOk || collectionId <= 0 || newName.isEmpty()) {
+            qCritical() << "Required options: --rename-collection ID --new-name NAME";
+            return 1;
+        }
+        CollectionFetchJob fetchCollection(Collection(collectionId), CollectionFetchJob::Base);
+        fetchCollection.setAutoDelete(false);
+        if (!fetchCollection.exec() || fetchCollection.collections().size() != 1) {
+            qCritical() << "Cannot fetch collection:" << fetchCollection.errorString();
+            return 6;
+        }
+        Collection collection = fetchCollection.collections().constFirst();
+        collection.setName(newName);
+        CollectionModifyJob modify(collection);
+        modify.setAutoDelete(false);
+        if (!modify.exec()) {
+            qCritical() << "Cannot rename collection:" << modify.errorString();
+            return 7;
+        }
+        output << QStringLiteral("Renamed collection %1 to %2\n").arg(collectionId).arg(newName);
+        return 0;
+    }
     bool accountOk = false;
     bool inboxOk = false;
     const auto accountRootId = valueFor(QStringLiteral("--account-root")).toLongLong(&accountOk);

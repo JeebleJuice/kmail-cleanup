@@ -6,11 +6,12 @@
   "inbox_name": "INBOX",
   "sent_id": 102,
   "review_id": 103,
-  "review_name": "Cleanup Review",
+  "review_name": "Review",
   "database": "akonadi",
   "akonadi_socket": "$XDG_RUNTIME_DIR/akonadi/mysql.socket",
   "payload_root": "~/.local/share/akonadi/file_db_data",
   "inventory_output": "~/mail_cleanup",
+  "enabled_presets": ["newsletters", "promotions", "notifications"],
   "protected_subject_pattern": "invoice|receipt|security|password|order|booking",
   "cleanup_rules": [
     {
