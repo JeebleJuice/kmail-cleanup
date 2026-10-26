@@ -1,9 +1,9 @@
 # KMail cleanup
 
-A local-first desktop app and CLI for conservative KMail/Akonadi cleanup. Choose
-presets, teach it from recent KMail headers, preview the exact matches, and move
-only that reviewed set to a configured review folder. It never permanently
-deletes messages.
+A local-first desktop app and CLI for conservative KMail/Akonadi organization.
+Choose presets, teach it from recent KMail headers, preview the exact matches,
+then route cleanup candidates to `Review` and completed-transaction mail to
+`Receipts`. It never permanently deletes messages.
 
 ## Desktop app
 
@@ -15,7 +15,7 @@ The Tauri app provides:
   from KMail and turns selected examples into explicit rules or private AI
   training examples;
 - browsable preview history with exact sender, subject, and reason details,
-  plus a confirmation step before moving anything; and
+  live remaining counts, and a confirmation step before moving anything;
 - an Akonadi folder scanner so account and collection IDs do not need to be
   discovered by hand.
 
@@ -32,12 +32,18 @@ presets and learned preferences.
 
 The optional preference learner is a small, on-device text classifier with no
 API, subscription, network request, or model download. In **Teach from mail**,
-select messages and label them **Teach: keep** or **Teach: clean**. It learns
-from sender, domain, and subject words, requires examples from both classes,
-and only acts above the configured confidence threshold. High-confidence keep
-labels can protect mail from broad presets. Protected-topic safeguards are
-checked before the learned model, and every clean prediction still goes through
-the normal preview and review workflow.
+select messages and label them **Teach: keep**, **Teach: clean**, or **Teach:
+receipt**. It learns from sender, domain, and subject words, requires enough
+examples for each learned category, and only acts above the configured
+confidence threshold. High-confidence keep labels can protect mail from broad
+presets. Every prediction still goes through the normal preview workflow.
+
+Receipt routing starts with built-in English and Danish context for strong
+completed-transaction signals such as receipts, kvitteringer, successful
+payments, and order confirmations. Negative context—including overdue invoices,
+failed payments, action-required notices, refunds, and shipping updates—stays
+out of `Receipts`. The preview records a destination for every candidate, and
+apply revalidates and acknowledges each destination batch separately.
 
 Training subjects and senders stay in the ignored `config.json`; they are never
 part of the public repository. Exact rules remain useful for deterministic
@@ -58,8 +64,9 @@ npm run desktop:build
 
 ## Setup
 
-1. Copy `config.example.json` to `config.json` and fill in your Akonadi resource,
-   collection IDs, folder names, and cleanup rules—or use **Mail setup → Scan
+1. Create `Review` and `Receipts` folders in KMail. Copy `config.example.json`
+   to `config.json` and fill in your Akonadi resource, collection IDs, folder
+   names, and cleanup rules—or use **Mail setup → Scan
    Akonadi** in the desktop app. `config.json` is ignored by Git because these
    values and rules can reveal details about a mail account.
 2. Build the local Akonadi helper:
@@ -96,6 +103,10 @@ To apply a particular preview, use:
 
 Before moving anything, the tool verifies the configured Akonadi account and
 folder identities, the message IDs and IMAP UIDs, and the synchronization state.
+If you already moved some previewed messages out of Inbox, the app updates the
+remaining count when it regains focus and apply safely skips those messages.
+An item that remains in Inbox but changed identity or is still syncing continues
+to stop the run and requires a fresh preview.
 Each batch waits for server acknowledgement. If a run stops with an error,
 inspect the report and Akonadi state before trying again.
 

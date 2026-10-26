@@ -18,10 +18,13 @@ struct ToolResult { ok: bool, stdout: String, stderr: String }
 struct RunSummary { id: String, path: String, summary: String, candidates: usize }
 
 #[derive(Serialize, Deserialize)]
-struct CandidateRow { akonadi_id: String, imap_uid: String, reason: String, sender: String, subject: String }
+struct CandidateRow { akonadi_id: String, imap_uid: String, #[serde(default)] destination: String, reason: String, sender: String, subject: String }
 
 #[derive(Serialize)]
 struct RunDetail { id: String, path: String, summary: String, candidates: usize, rows: Vec<CandidateRow> }
+
+#[derive(Serialize, Deserialize)]
+struct PreviewStatus { id: String, original: usize, pending: usize, no_longer_in_inbox: usize, changed: usize }
 
 #[derive(Serialize)]
 struct CollectionInfo { id: i64, name: String, parent_id: Option<i64>, resource: String }
@@ -35,6 +38,8 @@ struct RequiredConfig {
     sent_id: i64,
     review_id: i64,
     review_name: String,
+    receipts_id: i64,
+    receipts_name: String,
     cleanup_rules: Vec<Value>,
     enabled_presets: Vec<String>,
     ai_settings: AiSettings,
@@ -66,10 +71,11 @@ fn project_root() -> Result<PathBuf, String> {
 fn validate_config(value: &Value) -> Result<(), String> {
     let config: RequiredConfig = serde_json::from_value(value.clone())
         .map_err(|error| format!("Invalid configuration: {error}"))?;
-    if config.resource.trim().is_empty() || config.account_root_name.trim().is_empty() || config.review_name.trim().is_empty() {
-        return Err("Resource, account name, and review folder name are required".into());
+    if config.resource.trim().is_empty() || config.account_root_name.trim().is_empty()
+        || config.review_name.trim().is_empty() || config.receipts_name.trim().is_empty() {
+        return Err("Resource, account name, and destination folder names are required".into());
     }
-    if [config.account_root_id, config.inbox_id, config.sent_id, config.review_id].iter().any(|id| *id <= 0) {
+    if [config.account_root_id, config.inbox_id, config.sent_id, config.review_id, config.receipts_id].iter().any(|id| *id <= 0) {
         return Err("All collection IDs must be positive numbers".into());
     }
     if config.cleanup_rules.len() > 2_000 { return Err("Too many cleanup rules".into()); }
@@ -83,7 +89,7 @@ fn validate_config(value: &Value) -> Result<(), String> {
     }
     if config.training_examples.len() > 5_000
         || config.training_examples.iter().any(|item| {
-            !matches!(item.label.as_str(), "keep" | "clean")
+            !matches!(item.label.as_str(), "keep" | "clean" | "receipt")
                 || item.sender.len() > 1_000 || item.subject.len() > 10_000
         }) {
         return Err("AI training examples are invalid or exceed the safe limit".into());
@@ -184,6 +190,22 @@ fn load_run(id: String, state: tauri::State<AppState>) -> Result<RunDetail, Stri
 }
 
 #[tauri::command]
+fn latest_preview_status(state: tauri::State<AppState>) -> Result<Option<PreviewStatus>, String> {
+    let report = match run_directories(&state.root).into_iter().find_map(|path| {
+        let report = path.join("candidates.csv");
+        (report.is_file() && path.join("summary.txt").is_file()).then_some(report)
+    }) {
+        Some(report) => report,
+        None => return Ok(None),
+    };
+    let report = report.to_str().ok_or("Preview path is not valid UTF-8")?;
+    let result = run_python(&state.root, &["--status", "--report", report])?;
+    serde_json::from_str(&result.stdout)
+        .map(Some)
+        .map_err(|error| format!("Cleanup tool returned invalid preview status: {error}"))
+}
+
+#[tauri::command]
 fn apply_latest(state: tauri::State<AppState>) -> Result<ToolResult, String> {
     let report = run_directories(&state.root).into_iter().find_map(|path| {
         let report = path.join("candidates.csv");
@@ -227,7 +249,7 @@ pub fn run() {
     let root = project_root().expect("KMail Cleanup project directory is unavailable");
     tauri::Builder::default()
         .manage(AppState { root })
-        .invoke_handler(tauri::generate_handler![load_config, save_config, load_examples, run_preview, list_runs, load_run, apply_latest, discover_collections])
+        .invoke_handler(tauri::generate_handler![load_config, save_config, load_examples, run_preview, list_runs, load_run, latest_preview_status, apply_latest, discover_collections])
         .run(tauri::generate_context!())
         .expect("error while running KMail Cleanup");
 }
@@ -241,6 +263,7 @@ mod tests {
         let value = serde_json::json!({
             "resource":"resource", "account_root_id":1, "account_root_name":"Account",
             "inbox_id":2, "sent_id":3, "review_id":4, "review_name":"Review",
+            "receipts_id":5, "receipts_name":"Receipts",
             "cleanup_rules":[], "enabled_presets":["delete-everything"],
             "ai_settings":{"enabled":true,"confidence_threshold":0.9,"min_examples_per_class":4},
             "training_examples":[]

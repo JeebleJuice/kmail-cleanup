@@ -4,7 +4,7 @@ import type { MailExample } from "./types";
 
 const example = (id: string, sender: string): MailExample => ({
   akonadi_id: id, imap_uid: id, date: "", sender, from: sender, subject: "",
-  classification: "keep", reason: "", generic_category: "keep",
+  classification: "keep", destination: "keep", reason: "", generic_category: "keep",
 });
 
 describe("learnedRules", () => {

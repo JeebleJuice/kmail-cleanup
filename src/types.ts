@@ -8,7 +8,7 @@ export type Rule = {
   reason?: string;
 };
 
-export type TrainingExample = { sender: string; subject: string; label: "keep" | "clean" };
+export type TrainingExample = { sender: string; subject: string; label: "keep" | "clean" | "receipt" };
 
 export type Config = {
   resource: string;
@@ -19,6 +19,8 @@ export type Config = {
   sent_id: number;
   review_id: number;
   review_name: string;
+  receipts_id: number;
+  receipts_name: string;
   database: string;
   akonadi_socket: string;
   payload_root: string;
@@ -42,12 +44,14 @@ export type MailExample = {
   from: string;
   subject: string;
   classification: "remove" | "keep";
+  destination: "keep" | "review" | "receipts";
   reason: string;
   generic_category: string;
 };
 
 export type Run = { id: string; path: string; summary: string; candidates: number };
-export type Candidate = { akonadi_id: string; imap_uid: string; reason: string; sender: string; subject: string };
+export type Candidate = { akonadi_id: string; imap_uid: string; destination?: "review" | "receipts"; reason: string; sender: string; subject: string };
 export type RunDetail = Run & { rows: Candidate[] };
+export type PreviewStatus = { id: string; original: number; pending: number; no_longer_in_inbox: number; changed: number };
 export type ToolResult = { ok: boolean; stdout: string; stderr: string };
 export type CollectionInfo = { id: number; name: string; parent_id: number | null; resource: string };

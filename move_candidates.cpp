@@ -90,13 +90,45 @@ int main(int argc, char **argv)
         output << QStringLiteral("Renamed collection %1 to %2\n").arg(collectionId).arg(newName);
         return 0;
     }
+    if (args.contains(QStringLiteral("--create-folder"))) {
+        bool parentOk = false;
+        const auto parentId = valueFor(QStringLiteral("--account-root")).toLongLong(&parentOk);
+        const QString newName = valueFor(QStringLiteral("--new-name"));
+        if (!parentOk || parentId <= 0 || newName.isEmpty()) {
+            qCritical() << "Required options: --create-folder --account-root ID --new-name NAME";
+            return 1;
+        }
+        CollectionFetchJob existing(Collection(parentId), CollectionFetchJob::FirstLevel);
+        existing.setAutoDelete(false);
+        if (!existing.exec()) {
+            qCritical() << "Cannot inspect account folders:" << existing.errorString();
+            return 3;
+        }
+        const Collection found = findReviewFolder(existing.collections(), newName);
+        if (found.isValid()) {
+            output << QStringLiteral("Folder already exists with Akonadi ID %1\n").arg(found.id());
+            return 0;
+        }
+        Collection collection;
+        collection.setParentCollection(Collection(parentId));
+        collection.setName(newName);
+        collection.setContentMimeTypes({QStringLiteral("message/rfc822")});
+        CollectionCreateJob create(collection);
+        create.setAutoDelete(false);
+        if (!create.exec()) {
+            qCritical() << "Cannot create folder:" << create.errorString();
+            return 4;
+        }
+        output << QStringLiteral("Created folder with Akonadi ID %1\n").arg(create.collection().id());
+        return 0;
+    }
     bool accountOk = false;
     bool inboxOk = false;
     const auto accountRootId = valueFor(QStringLiteral("--account-root")).toLongLong(&accountOk);
     const auto inboxId = valueFor(QStringLiteral("--inbox")).toLongLong(&inboxOk);
-    const QString folderName = valueFor(QStringLiteral("--review-name"));
+    const QString folderName = valueFor(QStringLiteral("--destination-name"));
     if (!accountOk || !inboxOk || accountRootId <= 0 || inboxId <= 0 || folderName.isEmpty()) {
-        qCritical() << "Required options: --account-root ID --inbox ID --review-name NAME";
+        qCritical() << "Required options: --account-root ID --inbox ID --destination-name NAME";
         return 1;
     }
     const auto ids = readIds(csvPath);
@@ -115,7 +147,7 @@ int main(int argc, char **argv)
     Collection destination = findReviewFolder(fetch.collections(), folderName);
     output << QStringLiteral("Candidates: %1\n").arg(ids.size());
     output << QStringLiteral("Source Inbox ID: %1\n").arg(inboxId);
-    output << QStringLiteral("Review folder: %1 (%2)\n")
+    output << QStringLiteral("Destination folder: %1 (%2)\n")
                   .arg(folderName, destination.isValid() ? QString::number(destination.id()) : QStringLiteral("not yet created"));
     output.flush();
 

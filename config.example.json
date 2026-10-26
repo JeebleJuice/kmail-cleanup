@@ -7,6 +7,8 @@
   "sent_id": 102,
   "review_id": 103,
   "review_name": "Review",
+  "receipts_id": 104,
+  "receipts_name": "Receipts",
   "database": "akonadi",
   "akonadi_socket": "$XDG_RUNTIME_DIR/akonadi/mysql.socket",
   "payload_root": "~/.local/share/akonadi/file_db_data",

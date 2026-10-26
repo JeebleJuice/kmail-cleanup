@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CollectionInfo, Config, MailExample, Run, RunDetail, ToolResult } from "./types";
+import type { CollectionInfo, Config, MailExample, PreviewStatus, Run, RunDetail, ToolResult } from "./types";
 
 export const api = {
   loadConfig: () => invoke<Config>("load_config"),
@@ -9,5 +9,6 @@ export const api = {
   applyLatest: () => invoke<ToolResult>("apply_latest"),
   listRuns: () => invoke<Run[]>("list_runs"),
   loadRun: (id: string) => invoke<RunDetail>("load_run", { id }),
+  latestPreviewStatus: () => invoke<PreviewStatus | null>("latest_preview_status"),
   discoverCollections: () => invoke<CollectionInfo[]>("discover_collections"),
 };
