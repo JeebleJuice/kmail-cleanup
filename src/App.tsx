@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Archive, ArrowRight, Check, ChevronRight, CircleAlert, Database, Inbox,
+  Archive, Check, ChevronRight, CircleAlert, Database, Inbox,
   LoaderCircle, Mail, MailCheck, Play, Plus, RefreshCw, Save, Search,
   Settings, ShieldCheck, SlidersHorizontal, Sparkles, Tag, Trash2, X,
 } from "lucide-react";
@@ -54,6 +54,8 @@ export default function App() {
       .then(([nextConfig, nextRuns]) => {
         nextConfig.enabled_presets ??= ["newsletters", "promotions", "notifications"];
         nextConfig.cleanup_rules ??= [];
+        nextConfig.ai_settings ??= { enabled: false, confidence_threshold: 0.9, min_examples_per_class: 4 };
+        nextConfig.training_examples ??= [];
         setConfig(nextConfig);
         setSavedConfig(JSON.stringify(nextConfig));
         setRuns(nextRuns);
@@ -122,6 +124,23 @@ export default function App() {
     setView("rules");
   }
 
+  async function teachAi(label: "keep" | "clean") {
+    if (!config) return;
+    const chosen = examples.filter((mail) => selected.has(mail.akonadi_id));
+    const keys = new Set(chosen.map((mail) => `${mail.sender}\n${mail.subject}`));
+    const retained = config.training_examples.filter((item) => !keys.has(`${item.sender}\n${item.subject}`));
+    const training_examples = [...retained, ...chosen.map((mail) => ({ sender: mail.sender, subject: mail.subject, label }))];
+    const next = { ...config, ai_settings: { ...config.ai_settings, enabled: true }, training_examples };
+    setConfig(next); setSelected(new Set()); setBusy("teach-ai"); setError("");
+    try {
+      await api.saveConfig(next);
+      setSavedConfig(JSON.stringify(next));
+      setExamples(await api.loadExamples());
+      setNotice(`Taught ${chosen.length} message${chosen.length === 1 ? "" : "s"} as ${label}`);
+    } catch (cause) { setError(errorText(cause)); }
+    finally { setBusy(""); }
+  }
+
   if (!config) return <div className="splash"><LoaderCircle className="spin" /><span>Opening KMail Cleanup…</span>{error && <p>{error}</p>}</div>;
 
   const latest = runs[0];
@@ -154,7 +173,7 @@ export default function App() {
 
         <div className="content">
           {view === "rules" && <RulesView config={config} onChange={setConfig} onTogglePreset={togglePreset} />}
-          {view === "teach" && <TeachView examples={filteredExamples} allCount={examples.length} selected={selected} query={query} busy={busy} setQuery={setQuery} setSelected={setSelected} load={loadExamples} addRules={addRules} />}
+          {view === "teach" && <TeachView examples={filteredExamples} allCount={examples.length} selected={selected} query={query} busy={busy} setQuery={setQuery} setSelected={setSelected} load={loadExamples} addRules={addRules} teachAi={teachAi} />}
           {view === "runs" && <RunsView runs={runs} result={result} busy={busy} preview={preview} requestApply={() => setConfirmApply(true)} />}
           {view === "settings" && <SettingsView config={config} onChange={setConfig} />}
         </div>
@@ -177,7 +196,12 @@ function RulesView({ config, onChange, onTogglePreset }: { config: Config; onCha
     onChange({ ...config, cleanup_rules: [...config.cleanup_rules, { senders: [value], reason: "manual sender rule" }] });
     setManualSender("");
   }
+  const keepCount = config.training_examples.filter((item) => item.label === "keep").length;
+  const cleanCount = config.training_examples.filter((item) => item.label === "clean").length;
   return <div className="stack">
+    <section><div className="section-heading"><div><h2>Learned preferences</h2><p>A private, on-device model learns subject wording and sender patterns from your labels.</p></div></div>
+      <div className="learning-card"><div className="learning-icon"><Sparkles size={21} /></div><div className="learning-copy"><strong>Local preference learning</strong><span>{keepCount} keep · {cleanCount} clean examples · needs at least {config.ai_settings.min_examples_per_class} of each</span></div><label className="confidence"><span>Confidence {Math.round(config.ai_settings.confidence_threshold * 100)}%</span><input type="range" min="80" max="99" value={Math.round(config.ai_settings.confidence_threshold * 100)} onChange={(e) => onChange({ ...config, ai_settings: { ...config.ai_settings, confidence_threshold: Number(e.target.value) / 100 } })} /></label><button className={`switch ${config.ai_settings.enabled ? "on" : ""}`} aria-label="Toggle local preference learning" onClick={() => onChange({ ...config, ai_settings: { ...config.ai_settings, enabled: !config.ai_settings.enabled } })}><i /></button></div>
+    </section>
     <section><div className="section-heading"><div><h2>Quick presets</h2><p>Start broad, then refine with learned rules. Protected topics still win.</p></div><span className="count-pill">{config.enabled_presets.length} active</span></div>
       <div className="preset-grid">{PRESETS.map(({ id, title, description, icon: Icon }) => {
         const enabled = config.enabled_presets.includes(id);
@@ -191,13 +215,13 @@ function RulesView({ config, onChange, onTogglePreset }: { config: Config; onCha
   </div>;
 }
 
-function TeachView({ examples, allCount, selected, query, busy, setQuery, setSelected, load, addRules }: { examples: MailExample[]; allCount: number; selected: Set<string>; query: string; busy: string; setQuery: (s: string) => void; setSelected: (s: Set<string>) => void; load: () => void; addRules: (kind: "sender" | "domain") => void }) {
+function TeachView({ examples, allCount, selected, query, busy, setQuery, setSelected, load, addRules, teachAi }: { examples: MailExample[]; allCount: number; selected: Set<string>; query: string; busy: string; setQuery: (s: string) => void; setSelected: (s: Set<string>) => void; load: () => void; addRules: (kind: "sender" | "domain") => void; teachAi: (label: "keep" | "clean") => void }) {
   function toggle(id: string) { const next = new Set(selected); next.has(id) ? next.delete(id) : next.add(id); setSelected(next); }
   return <div className="stack">
     <div className="teach-hero"><div className="hero-icon"><Inbox size={26} /></div><div><h2>Learn from real messages</h2><p>Load recent KMail headers, select mail you consider low-value, then create transparent sender or domain rules. Message bodies never leave KMail.</p></div><button className="button primary" disabled={!!busy} onClick={load}>{busy === "examples" ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}{allCount ? "Refresh inbox" : "Load inbox examples"}</button></div>
     {allCount > 0 && <><div className="mail-toolbar"><label><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search sender, subject or reason" /></label><span>{examples.length} of {allCount} messages</span></div>
       <div className="mail-list">{examples.map((mail) => <button className={`mail-row ${selected.has(mail.akonadi_id) ? "selected" : ""}`} key={mail.akonadi_id} onClick={() => toggle(mail.akonadi_id)}><span className="checkbox">{selected.has(mail.akonadi_id) && <Check size={13} />}</span><div className="mail-sender"><strong>{mail.from || mail.sender}</strong><span>{mail.date}</span></div><div className="mail-subject"><strong>{mail.subject || "(No subject)"}</strong><span>{mail.reason}</span></div><span className={`decision ${mail.classification}`}>{mail.classification}</span></button>)}</div>
-      {selected.size > 0 && <div className="selection-bar"><span><b>{selected.size}</b> selected</span><button className="button secondary" onClick={() => addRules("sender")}>Always clean these senders</button><button className="button primary" onClick={() => addRules("domain")}>Clean their domains <ArrowRight size={16} /></button></div>}
+      {selected.size > 0 && <div className="selection-bar"><span><b>{selected.size}</b> selected</span><button className="button keep-button" onClick={() => teachAi("keep")}>Teach: keep</button><button className="button clean-button" onClick={() => teachAi("clean")}>Teach: clean</button><span className="bar-divider" /><button className="button secondary compact" title="Create exact sender rules" onClick={() => addRules("sender")}>Exact sender</button><button className="button secondary compact" title="Create broader domain rules" onClick={() => addRules("domain")}>Whole domain</button></div>}
     </>}
   </div>;
 }

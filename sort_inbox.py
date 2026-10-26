@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import re
 import subprocess
 import sys
@@ -40,6 +41,54 @@ CATEGORY_PRESETS = {
     "advertisement": "promotions",
     "notification": "notifications",
 }
+AI_SETTINGS = CONFIG.get("ai_settings", {})
+TRAINING_EXAMPLES = CONFIG.get("training_examples", [])
+
+
+def learning_features(sender: str, subject: str) -> list[str]:
+    sender = sender.casefold()
+    domain = sender.rsplit("@", 1)[-1] if "@" in sender else ""
+    words = re.findall(r"[^\W_]{3,}", subject.casefold(), re.UNICODE)[:40]
+    features = [f"word:{word}" for word in words]
+    if sender:
+        features.append(f"sender:{sender}")
+    if domain:
+        features.append(f"domain:{domain}")
+    return features
+
+
+def learned_prediction(sender: str, subject: str) -> tuple[str, float] | None:
+    if not AI_SETTINGS.get("enabled", False):
+        return None
+    labels = ("keep", "clean")
+    examples = [item for item in TRAINING_EXAMPLES if item.get("label") in labels]
+    minimum = int(AI_SETTINGS.get("min_examples_per_class", 4))
+    documents = {label: [item for item in examples if item["label"] == label] for label in labels}
+    if any(len(documents[label]) < minimum for label in labels):
+        return None
+
+    counts = {label: Counter() for label in labels}
+    totals = {label: 0 for label in labels}
+    vocabulary: set[str] = set()
+    for label in labels:
+        for item in documents[label]:
+            features = learning_features(str(item.get("sender", "")), str(item.get("subject", "")))
+            counts[label].update(features)
+            totals[label] += len(features)
+            vocabulary.update(features)
+    features = learning_features(sender, subject)
+    if not features or not vocabulary:
+        return None
+    scores: dict[str, float] = {}
+    for label in labels:
+        scores[label] = math.log((len(documents[label]) + 1) / (len(examples) + len(labels)))
+        denominator = totals[label] + len(vocabulary)
+        scores[label] += sum(math.log((counts[label][feature] + 1) / denominator) for feature in features)
+    highest = max(scores, key=scores.get)
+    other = labels[0] if highest == labels[1] else labels[1]
+    confidence = 1 / (1 + math.exp(-min(scores[highest] - scores[other], 60)))
+    threshold = float(AI_SETTINGS.get("confidence_threshold", 0.9))
+    return (highest, confidence) if confidence >= threshold else None
 
 
 def db(sql: str) -> list[list[str]]:
@@ -96,6 +145,10 @@ def classify(msg, contacts: set[str]) -> str | None:
 
     if PROTECTED_SUBJECT.search(subject):
         return None
+    prediction = learned_prediction(sender, subject)
+    if prediction:
+        label, confidence = prediction
+        return f"learned preference ({confidence:.0%})" if label == "clean" else None
     category, reason = mail.classify(msg, contacts)
     preset = CATEGORY_PRESETS.get(category)
     return reason if preset in ENABLED_PRESETS else None

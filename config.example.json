@@ -12,6 +12,12 @@
   "payload_root": "~/.local/share/akonadi/file_db_data",
   "inventory_output": "~/mail_cleanup",
   "enabled_presets": ["newsletters", "promotions", "notifications"],
+  "ai_settings": {
+    "enabled": false,
+    "confidence_threshold": 0.9,
+    "min_examples_per_class": 4
+  },
+  "training_examples": [],
   "protected_subject_pattern": "invoice|receipt|security|password|order|booking",
   "cleanup_rules": [
     {

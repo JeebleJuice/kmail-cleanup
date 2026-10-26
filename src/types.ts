@@ -8,6 +8,8 @@ export type Rule = {
   reason?: string;
 };
 
+export type TrainingExample = { sender: string; subject: string; label: "keep" | "clean" };
+
 export type Config = {
   resource: string;
   account_root_id: number;
@@ -23,6 +25,12 @@ export type Config = {
   inventory_output: string;
   protected_subject_pattern: string;
   enabled_presets: string[];
+  ai_settings: {
+    enabled: boolean;
+    confidence_threshold: number;
+    min_examples_per_class: number;
+  };
+  training_examples: TrainingExample[];
   cleanup_rules: Rule[];
 };
 

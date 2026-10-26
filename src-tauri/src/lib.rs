@@ -37,7 +37,15 @@ struct RequiredConfig {
     review_name: String,
     cleanup_rules: Vec<Value>,
     enabled_presets: Vec<String>,
+    ai_settings: AiSettings,
+    training_examples: Vec<TrainingExample>,
 }
+
+#[derive(Deserialize)]
+struct AiSettings { enabled: bool, confidence_threshold: f64, min_examples_per_class: usize }
+
+#[derive(Deserialize)]
+struct TrainingExample { sender: String, subject: String, label: String }
 
 fn project_root() -> Result<PathBuf, String> {
     if let Some(path) = std::env::var_os("KMAIL_CLEANUP_HOME") {
@@ -69,6 +77,18 @@ fn validate_config(value: &Value) -> Result<(), String> {
     if config.enabled_presets.iter().any(|preset| !allowed.contains(&preset.as_str())) {
         return Err("Configuration contains an unknown preset".into());
     }
+    if !(0.5..=0.999).contains(&config.ai_settings.confidence_threshold)
+        || !(2..=100).contains(&config.ai_settings.min_examples_per_class) {
+        return Err("AI confidence or minimum-example setting is outside the safe range".into());
+    }
+    if config.training_examples.len() > 5_000
+        || config.training_examples.iter().any(|item| {
+            !matches!(item.label.as_str(), "keep" | "clean")
+                || item.sender.len() > 1_000 || item.subject.len() > 10_000
+        }) {
+        return Err("AI training examples are invalid or exceed the safe limit".into());
+    }
+    let _ = config.ai_settings.enabled;
     Ok(())
 }
 
@@ -221,7 +241,9 @@ mod tests {
         let value = serde_json::json!({
             "resource":"resource", "account_root_id":1, "account_root_name":"Account",
             "inbox_id":2, "sent_id":3, "review_id":4, "review_name":"Review",
-            "cleanup_rules":[], "enabled_presets":["delete-everything"]
+            "cleanup_rules":[], "enabled_presets":["delete-everything"],
+            "ai_settings":{"enabled":true,"confidence_threshold":0.9,"min_examples_per_class":4},
+            "training_examples":[]
         });
         assert!(validate_config(&value).is_err());
     }

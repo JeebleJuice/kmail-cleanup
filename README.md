@@ -12,7 +12,8 @@ The Tauri app provides:
 - toggles for newsletters, promotions, and low-value notification presets;
 - editable sender, domain, subject, and exclusion rules;
 - a **Teach from mail** view that reads recent sender/subject headers directly
-  from KMail and turns selected examples into explicit rules;
+  from KMail and turns selected examples into explicit rules or private AI
+  training examples;
 - browsable preview history with exact sender, subject, and reason details,
   plus a confirmation step before moving anything; and
 - an Akonadi folder scanner so account and collection IDs do not need to be
@@ -21,6 +22,26 @@ The Tauri app provides:
 Message bodies are never loaded into the UI. All processing stays on the local
 machine, the window has a network-blocking content security policy, and the
 review-first checks used by the CLI also protect actions started from the app.
+
+### Exact rules and local learning
+
+An **exact sender** rule matches one complete address, such as
+`updates@example.com`. A **whole domain** rule matches every sender at that
+domain and is therefore broader. Both are deterministic and take priority over
+presets and learned preferences.
+
+The optional preference learner is a small, on-device text classifier with no
+API, subscription, network request, or model download. In **Teach from mail**,
+select messages and label them **Teach: keep** or **Teach: clean**. It learns
+from sender, domain, and subject words, requires examples from both classes,
+and only acts above the configured confidence threshold. High-confidence keep
+labels can protect mail from broad presets. Protected-topic safeguards are
+checked before the learned model, and every clean prediction still goes through
+the normal preview and review workflow.
+
+Training subjects and senders stay in the ignored `config.json`; they are never
+part of the public repository. Exact rules remain useful for deterministic
+exceptions, while learning is better for patterns that span changing senders.
 
 Install the JavaScript dependencies and start the desktop app:
 
