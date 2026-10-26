@@ -1,0 +1,5 @@
+__pycache__/
+runs/
+build/
+config.json
+kmail_cleanup_move

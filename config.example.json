@@ -1,0 +1,27 @@
+{
+  "resource": "akonadi_imap_resource_N",
+  "account_root_id": 100,
+  "account_root_name": "IMAP Account",
+  "inbox_id": 101,
+  "inbox_name": "INBOX",
+  "sent_id": 102,
+  "review_id": 103,
+  "review_name": "Cleanup Review",
+  "database": "akonadi",
+  "akonadi_socket": "$XDG_RUNTIME_DIR/akonadi/mysql.socket",
+  "payload_root": "~/.local/share/akonadi/file_db_data",
+  "inventory_output": "~/mail_cleanup",
+  "protected_subject_pattern": "invoice|receipt|security|password|order|booking",
+  "cleanup_rules": [
+    {
+      "domains": ["newsletter.example"],
+      "subject_pattern": "sale|newsletter",
+      "exclude_subject_pattern": "receipt|security",
+      "reason": "configured newsletter"
+    },
+    {
+      "senders": ["notifications@example.com"],
+      "reason": "configured notification"
+    }
+  ]
+}
